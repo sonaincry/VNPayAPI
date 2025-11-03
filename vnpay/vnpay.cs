@@ -399,6 +399,55 @@ namespace vnpay
                 }
             }
         }
+
+        public string RequestCancel(
+    string orderCode, string terminalCode, string merchantCode,
+    string reason, string secretKey)
+        {
+            if (string.IsNullOrEmpty(orderCode)) throw new ArgumentNullException(nameof(orderCode));
+            if (string.IsNullOrEmpty(terminalCode)) throw new ArgumentNullException(nameof(terminalCode));
+            if (string.IsNullOrEmpty(merchantCode)) throw new ArgumentNullException(nameof(merchantCode));
+            if (string.IsNullOrEmpty(reason)) reason = "Customer cancel";
+
+            string checksum = GenerateCancelChecksum(orderCode, terminalCode, merchantCode, reason, secretKey);
+
+            var payload = new
+            {
+                orderCode,
+                terminalCode,
+                merchantCode,
+                reason,
+                checksum
+            };
+
+            return System.Text.Json.JsonSerializer.Serialize(payload);
+        }
+
+        private string GenerateCancelChecksum(string orderCode, string terminalCode, string merchantCode, string reason, string secretKey)
+        {
+            string data = $"{secretKey}{orderCode}|{terminalCode}|{merchantCode}|{reason}";
+            using var hmac = new HMACSHA256(Encoding.UTF8.GetBytes(secretKey));
+            byte[] hash = hmac.ComputeHash(Encoding.UTF8.GetBytes(data));
+            return Convert.ToBase64String(hash);
+        }
+
+        public async Task<string> SendCancelRequest(string jsonPayload, string endpoint)
+        {
+            using var httpClient = new HttpClient();
+            var content = new StringContent(jsonPayload, Encoding.UTF8, "application/json");
+            try
+            {
+                HttpResponseMessage response = await httpClient.PostAsync(endpoint, content);
+                string result = await response.Content.ReadAsStringAsync();
+                Console.WriteLine($"[CANCEL] Status: {response.StatusCode}, Response: {result}");
+                return result;
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[CANCEL] Exception: {ex.Message}");
+                return $"{{\"code\": 500, \"message\": \"Request failed: {ex.Message}\"}}";
+            }
+        }
         //end 
 
         //Get Order Detail when scanned QR to pay 
